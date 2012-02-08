@@ -41,6 +41,7 @@ MEMCACHED_STATS = {
     'delete_hits':              'GAUGE',
     'delete_misses':            'GAUGE',
     'evictions':                'GAUGE', 
+    'evicted_nonzero':          'DERIVE',
     'get_hits':                 'GAUGE',
     'get_misses':               'GAUGE',
     'incr_hits':                'GAUGE',

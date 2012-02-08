@@ -8,23 +8,55 @@
 # For complete information please visit: http://www.zenoss.com/oss/
 ################################################################################
 
-from twisted.internet import reactor, protocol
-from twisted.protocols.memcache import MemCacheProtocol, DEFAULT_PORT
+from twisted.internet import reactor, protocol, defer
+from twisted.protocols.memcache import MemCacheProtocol, DEFAULT_PORT, Command
 from twisted.python import usage
 from ZenPacks.community.Memcached.datasources.MemcachedDataSource import MEMCACHED_STATS
 import sys
 
 class MemcachedMonitor( MemCacheProtocol ):
 
-    def connectionMade(self):
-        return self.stats()\
-		.addCallback( self.calculatePercentages )\
-                .addCallback( self.outputResults )\
-                .addErrback( self.handleErrors )\
+    def full_stats(self):
+        self.sendLine("stats items")
+        cmdObj = Command("stats", values={})
+        self._current.append(cmdObj)
+        return cmdObj._deferred
 
-    def calculatePercentages( self, stats):
-        #cast
+
+    def connectionMade(self):
+
+        a = self.full_stats().addCallback(self.processFullStats)
+        b = self.stats().addCallback(self.processStats)
+
+        d = defer.gatherResults([a,b])
+
+        return d\
+                .addCallback(self.outputResults)\
+                .addErrback(self.handleErrors)
+
+    def processFullStats( self, stats):
+
+        newstats = {}
+        newstats['evicted_nonzero'] = 0
         for k,v in stats.items():
+            print k, v
+            try:
+                newstats[k] = float(v)
+            except:
+                newstats[k] = v
+
+            if (k.endswith('evicted_nonzero')):
+                newstats['evicted_nonzero'] += newstats[k]
+
+
+        statNames = MEMCACHED_STATS.keys()
+        return dict(zip( statNames, [ newstats.get(x, None) for x in statNames ]))
+
+
+    def processStats( self, stats):
+
+        for k,v in stats.items():
+            print k, v
             try:
                 stats[k] = float(v)
             except:
@@ -58,7 +90,7 @@ class MemcachedMonitor( MemCacheProtocol ):
         return dict(zip( statNames, [ stats.get(x, None) for x in statNames ]))  
 
     def outputResults(self, stats):
-        print "CMD OK|%s" % ' '.join(["%s=%s" %(k,v) for k,v in stats.items()])
+        print "CMD OK|%s" % ' '.join(["%s=%s" %(k,v) for k,v in dict(stats[0].items() + stats[1].items()).items()])
         self.transport.loseConnection()
 
     def handleErrors(self, failure):
