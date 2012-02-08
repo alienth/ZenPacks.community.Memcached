@@ -25,35 +25,17 @@ class MemcachedMonitor( MemCacheProtocol ):
 
     def connectionMade(self):
 
-        a = self.full_stats().addCallback(self.processFullStats)
-        b = self.stats().addCallback(self.processStats)
-
-        d = defer.gatherResults([a,b])
+        d = defer.gatherResults([self.full_stats(),self.stats()])
 
         return d\
+                .addCallback(self.processStats)\
                 .addCallback(self.outputResults)\
                 .addErrback(self.handleErrors)
 
-    def processFullStats( self, stats):
+    def processStats( self, statsList):
 
-        newstats = {}
-        newstats['evicted_nonzero'] = 0
-        for k,v in stats.items():
-            print k, v
-            try:
-                newstats[k] = float(v)
-            except:
-                newstats[k] = v
-
-            if (k.endswith('evicted_nonzero')):
-                newstats['evicted_nonzero'] += newstats[k]
-
-
-        statNames = MEMCACHED_STATS.keys()
-        return dict(zip( statNames, [ newstats.get(x, None) for x in statNames ]))
-
-
-    def processStats( self, stats):
+        stats = dict(statsList[0].items() + statsList[1].items())
+        stats['evicted_nonzero'] = 0;
 
         for k,v in stats.items():
             print k, v
@@ -61,6 +43,9 @@ class MemcachedMonitor( MemCacheProtocol ):
                 stats[k] = float(v)
             except:
                 stats[k] = v
+
+            if (k.endswith('evicted_nonzero')):
+                stats['evicted_nonzero'] += stats[k]
 
         stats['hit_percent'] = 0
         if ('get_hits' in stats 
@@ -90,7 +75,7 @@ class MemcachedMonitor( MemCacheProtocol ):
         return dict(zip( statNames, [ stats.get(x, None) for x in statNames ]))  
 
     def outputResults(self, stats):
-        print "CMD OK|%s" % ' '.join(["%s=%s" %(k,v) for k,v in dict(stats[0].items() + stats[1].items()).items()])
+        print "CMD OK|%s" % ' '.join(["%s=%s" %(k,v) for k,v in stats.items()])
         self.transport.loseConnection()
 
     def handleErrors(self, failure):
