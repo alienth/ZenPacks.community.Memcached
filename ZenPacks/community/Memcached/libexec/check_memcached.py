@@ -38,7 +38,6 @@ class MemcachedMonitor( MemCacheProtocol ):
         stats['evicted_nonzero'] = 0;
 
         for k,v in stats.items():
-            print k, v
             try:
                 stats[k] = float(v)
             except:
